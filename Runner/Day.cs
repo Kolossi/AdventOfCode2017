@@ -13,22 +13,23 @@ namespace Runner
 
         public string Solve(string set, Func<string,string> solver)
         {
-            string input;
+            string input = string.Empty;
             try
             {
-                GetInput(set);
+                input = GetInput(set);
             }
             catch (FileNotFoundException e)
             {
-                return "INPUT MISSING";
             }
+
+            if (string.IsNullOrWhiteSpace(input)) return "INPUT MISSING";
 
             try
             {
                 Stopwatch sw = Stopwatch.StartNew();
-                var result =  solver(GetInput(set));
+                var result =  solver(input);
                 sw.Stop();
-                Console.WriteLine("Took : {0} ticks / {1} ms",sw.ElapsedTicks,sw.ElapsedMilliseconds);
+                Console.Write("(Took : {0}) ",sw.Elapsed);
                 return result;
             }
             catch (NotImplementedException e)
@@ -60,37 +61,53 @@ namespace Runner
         public bool Test(string set, Func<string, string> solver)
         {
             bool result = true;
-            string input = GetInput(string.Format("{0}Tests",set));
+            string input = string.Empty;
+
+            Console.WriteLine(string.Format("    {0} Tests", set));
+            try
+            {
+                input = GetInput(string.Format("{0}Tests", set));
+            }
+            catch (FileNotFoundException)
+            {
+            }
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                Console.WriteLine("      TEST INPUT MISSING");
+                return false;
+            }
+
             var lines = input.Split("\n\r".ToCharArray(), StringSplitOptions.RemoveEmptyEntries);
-            Console.WriteLine(string.Format("{0} Tests", set));
+
             foreach (var line in lines)
             {
-                Console.Write(string.Format("  {0} : ",line));
+
                 var parts = line.Split(":");
                 var testInput = parts[0];
                 var expectedOutput = parts[1];
-                string output=string.Empty;
+                string output = string.Empty;
                 try
                 {
                     output = solver(testInput);
                 }
                 catch (NotImplementedException e)
                 {
-                    Console.WriteLine("NOT IMPLEMENTED");
+                    Console.WriteLine(string.Format("    {0} : NOT IMPLEMENTED", line));
                     result = false;
-                }
-                
-                if (output == expectedOutput)
-                {
-                    Console.WriteLine("OK");
-                }
-                else
-                {
-                    result = false;
-                    Console.WriteLine(string.Format("    Input : {0}, Expected : {1}, Got : {2}", testInput,
-                        expectedOutput, output));
                 }
 
+                if (output != expectedOutput)
+                {
+                    result = false;
+                    Console.WriteLine(string.Format("    {0} : FAILED", line));
+                    Console.WriteLine(string.Format("      Input : {0}, Expected : {1}, Got : {2}", testInput,
+                        expectedOutput, output));
+                }
+                //else
+                //{
+                //    Console.WriteLine(string.Format("    {0} : OK", line));
+                //}
             }
             return result;
         }
