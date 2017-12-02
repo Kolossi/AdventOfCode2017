@@ -24,6 +24,8 @@ namespace Runner
             return Solve(input, offset);
         }
 
+
+
         private string Solve(string input, int offset)
         {
             int total = 0;

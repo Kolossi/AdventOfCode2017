@@ -48,14 +48,24 @@ namespace Runner
             return Solve("Second", this.Second);
         }
 
+        public virtual string FirstTest(string input)
+        {
+            return this.First(input);
+        }
+
+        public virtual string SecondTest(string input)
+        {
+            return this.Second(input);
+        }
+
         public bool TestFirst()
         {
-            return Test("First", this.First);
+            return Test("First", this.FirstTest);
         }
 
         public bool TestSecond()
         {
-            return Test("Second", this.Second);
+            return Test("Second", this.SecondTest);
         }
 
         public bool Test(string set, Func<string, string> solver)
@@ -104,10 +114,10 @@ namespace Runner
                     Console.WriteLine(string.Format("      Input : {0}, Expected : {1}, Got : {2}", testInput,
                         expectedOutput, output));
                 }
-                //else
-                //{
-                //    Console.WriteLine(string.Format("    {0} : OK", line));
-                //}
+                else
+                {
+                    Console.WriteLine(string.Format("    {0} : OK", line));
+                }
             }
             return result;
         }
