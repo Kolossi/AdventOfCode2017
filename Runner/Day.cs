@@ -18,7 +18,7 @@ namespace Runner
             {
                 input = GetInput(set);
             }
-            catch (FileNotFoundException e)
+            catch (FileNotFoundException)
             {
             }
 
@@ -32,7 +32,7 @@ namespace Runner
                 Console.Write("(Took : {0}) ",sw.Elapsed);
                 return result;
             }
-            catch (NotImplementedException e)
+            catch (NotImplementedException)
             {
                 return "NOT IMPLEMENTED";
             }
@@ -100,23 +100,22 @@ namespace Runner
                 try
                 {
                     output = solver(testInput);
+                    if (output != expectedOutput)
+                    {
+                        result = false;
+                        Console.WriteLine(string.Format("    {0} : FAILED", line));
+                        Console.WriteLine(string.Format("      Input : {0}, Expected : {1}, Got : {2}", testInput,
+                            expectedOutput, output));
+                    }
+                    else
+                    {
+                        Console.WriteLine(string.Format("    {0} : OK", line));
+                    }
                 }
-                catch (NotImplementedException e)
+                catch (NotImplementedException)
                 {
                     Console.WriteLine(string.Format("    {0} : NOT IMPLEMENTED", line));
                     result = false;
-                }
-
-                if (output != expectedOutput)
-                {
-                    result = false;
-                    Console.WriteLine(string.Format("    {0} : FAILED", line));
-                    Console.WriteLine(string.Format("      Input : {0}, Expected : {1}, Got : {2}", testInput,
-                        expectedOutput, output));
-                }
-                else
-                {
-                    Console.WriteLine(string.Format("    {0} : OK", line));
                 }
             }
             return result;
@@ -127,6 +126,11 @@ namespace Runner
             string filename = string.Format("Inputs/{0}{1}.txt",this.GetType().Name, set);
             string input = System.IO.File.ReadAllText(filename);
             return input;
+        }
+
+        public static string[] GetLines(string input)
+        {
+            return input.Split("\n\r".ToCharArray(), StringSplitOptions.RemoveEmptyEntries);
         }
     }
 }
