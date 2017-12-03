@@ -6,33 +6,7 @@ namespace Runner
 {
     class Day03 :  Day
     {
-        public class XY : IEquatable<XY>
-        {
-            public int X { get; set; }
-            public int Y { get; set; }
-            public XY(int x, int y)
-            {
-                X = x;
-                Y = y;
-            }
-            public override string ToString()
-            {
-                return string.Format("[{0},{1}]",X,Y);
-            }
-
-            public override bool Equals(object obj)
-            {
-                if (obj as XY == null) return base.Equals(obj);
-                XY objXY = (XY)obj;
-                return Equals(objXY);
-            }
-
-            public bool Equals(XY objXY)
-            {
-                return (objXY.X == X && objXY.Y == Y);
-            }
-        }
-
+       
         private XY[] Directions = new XY[] {
                 new XY(0, 1),
                 new XY(1, 0),
@@ -107,7 +81,6 @@ namespace Runner
                 Position.X += Directions[Direction].X;
                 Position.Y += Directions[Direction].Y;
                 var sum = GetSum(Position);
-                Console.WriteLine(string.Format("{0}={1}", Position, sum));
                 if (sum>TargetSum)
                 {
                     TargetXY = Position;
@@ -120,6 +93,7 @@ namespace Runner
 
         private int GetSum(XY position)
         {
+            var posKey = new XY(position.X, position.Y);
             int sum = 0;
             for (int x = -1; x <= 1 ; x++)
             {
@@ -131,7 +105,7 @@ namespace Runner
                     sum += SumMap[key];
                 }
             }
-            SumMap[position] = sum;
+            SumMap[posKey] = sum;
 
             return sum;
         }
