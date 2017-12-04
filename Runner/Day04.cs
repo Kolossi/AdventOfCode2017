@@ -9,28 +9,68 @@ namespace Runner
     {
         public override string First(string input)
         {
-            return GetLines(input).Sum(l => IsValid(l)).ToString();
+            return GetLines(input).Sum(l => FirstIsValid(l)).ToString();
         }
 
         public override string FirstTest(string input)
         {
-            return IsValid(input).ToString();
+            return FirstIsValid(input).ToString();
         }
 
-        public int IsValid(string line)
+        public override string SecondTest(string input)
         {
-            var used = new HashSet<string>();
+            return SecondIsValid(input).ToString();
+        }
+
+        public int FirstIsValid(string line)
+        {
+            var previousWords = new HashSet<string>();
             foreach (var word in GetParts(line))
             {
-                if (used.Contains(word)) return 0;
-                used.Add(word);
+                if (previousWords.Contains(word)) return 0;
+                previousWords.Add(word);
             }
             return 1;
         }
 
+        public int SecondIsValid(string line)
+        {
+            var previousWords = new HashSet<string>();
+            foreach (var word in GetParts(line))
+            {
+                foreach (var previousWord in previousWords)
+                {
+                    if (IsAnagram(word, previousWord)) return 0;
+                }
+                previousWords.Add(word);
+            }
+            return 1;
+        }
+
+        public static bool IsAnagram(string word1, string word2)
+        {
+            if (word1.Length != word2.Length) return false;
+            var targetChars = new List<char>(word1.ToCharArray());
+            foreach (var c in word2)
+            {
+                bool found = false;
+                for (int i = 0; i < targetChars.Count; i++)
+                {
+                    if (targetChars[i]==c)
+                    {
+                        targetChars.RemoveAt(i);
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) return false;
+            }
+            return true;
+        }
+
         public override string Second(string input)
         {
-            throw new NotImplementedException();
+            return GetLines(input).Sum(l => SecondIsValid(l)).ToString();
         }
     }
 }
