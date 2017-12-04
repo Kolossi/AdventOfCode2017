@@ -132,5 +132,11 @@ namespace Runner
         {
             return input.Split("\n\r".ToCharArray(), StringSplitOptions.RemoveEmptyEntries);
         }
+
+        public static string[] GetParts(string input)
+        {
+            return input.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+        }
+
     }
 }
