@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Runner
 {
@@ -85,16 +86,43 @@ namespace Runner
 
         public override string Second(string input)
         {
+            //return SecondWithParallel(input);
             var scanners = GetScanners(input);
-            int i = 0;
+            int delay = 0;
             do
             {
-                if (!IsCaught(scanners, i))
+                if (!IsCaught(scanners, delay))
                 {
-                    return i.ToString();
+                    return delay.ToString();
                 }
-                i++;
+                delay++;
             } while (true);
+        }
+
+        // reduced solution from 10 secs to 6 secs
+        public string SecondWithParallel(string input)
+        {
+            int batchSize = 1000000;
+            var scanners = GetScanners(input);
+            int delayOffset = 0;
+            int result = 0;
+            do
+            {
+                Parallel.ForEach(Enumerable.Range(delayOffset, batchSize),
+                    d =>
+                    {
+                        if (result > 0) return;
+                        int delay = (int) d;
+                        if (!IsCaught(scanners, delay))
+                        {
+                            result=delay;
+                            return;
+                        }
+                    });
+                if (result > 0) break;
+                delayOffset += batchSize;
+            } while (true);
+            return result.ToString();
         }
     }
 }
