@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Xml.Serialization;
 
 namespace Runner
 {
@@ -14,7 +15,69 @@ namespace Runner
 
         public override string Second(string input)
         {
-            return ShowBits(GetBitArray(input));
+            var array = GetBitArray(input);
+            var groupsArray = GetGroupArray(array);
+            Console.WriteLine();
+            return GetGroupCount(groupsArray).ToString();
+        }
+
+        private static int GetGroupCount(int[,] groupArray)
+        {
+            var groups = new HashSet<int>();
+            for (int y = 0; y < groupArray.GetLength(1); y++)
+            {
+                for (int x = 0; x < groupArray.GetLength(0); x++)
+                {
+                    groups.Add(groupArray[x, y]);
+                }
+            }
+            return groups.Count(g=>g!=0);
+        }
+
+        private static int[,] GetGroupArray(bool[,] array)
+        {
+            var groupArray = new int[array.GetLength(0), array.GetLength(1)];
+            int nextGroupNum = 1,groupNum=1;
+            bool inGroup = false;
+            for (int y = 0; y < array.GetLength(1); y++)
+            {
+                for (int x = 0; x < array.GetLength(0); x++)
+                {
+                    if (array[x, y])
+                    {
+                        if (!inGroup)
+                        {
+                            groupNum = nextGroupNum++;
+                        }
+                        inGroup = true;
+                        groupArray[x, y] = groupNum;
+                        if (y > 0 && array[x, y-1])
+                        {
+                            var previousGroup = groupArray[x, y-1];
+                            MergeGroup(groupArray, groupNum, previousGroup, y);
+                            groupNum = previousGroup;
+                        }
+                    }
+                    else if (inGroup)
+                    {
+                        inGroup = false;
+                    }
+                }
+                inGroup = false;
+            }
+
+            return groupArray;
+        }
+
+        private static void MergeGroup(int[,] groupArray, int groupNum, int previousGroup, int row)
+        {
+            for (int y = 0; y < groupArray.GetLength(1); y++)
+            {
+                for (int x = 0; x < groupArray.GetLength(0); x++)
+                {
+                    if (groupArray[x, y] == groupNum) groupArray[x, y] = previousGroup;
+                }
+            }
         }
 
         private bool[,] GetBitArray(string input)
@@ -29,24 +92,38 @@ namespace Runner
             return array;
         }
 
-        private string ShowBits(bool[,] array)
-        {
-            var sb = new StringBuilder();
-            for (int x = 0; x < array.GetLength(0); x++)
-            {
-                for (int y = 0; y < array.GetLength(1); y++)
-                {
-                    sb.Append(array[x, y] ? "1" : "0");
-                }
-                sb.AppendLine();
-            }
-            return sb.ToString();
-        }
+        //private string ShowBits(bool[,] array)
+        //{
+        //    var sb = new StringBuilder();
+        //    for (int x = 0; x < array.GetLength(0); x++)
+        //    {
+        //        for (int y = 0; y < array.GetLength(1); y++)
+        //        {
+        //            sb.Append(array[x, y] ? "1" : "0");
+        //        }
+        //        sb.AppendLine();
+        //    }
+        //    return sb.ToString();
+        //}
+
+        //private string ShowGroups(int[,] array)
+        //{
+        //    var sb = new StringBuilder();
+        //    for (int x = 0; x < array.GetLength(0); x++)
+        //    {
+        //        for (int y = 0; y < array.GetLength(1); y++)
+        //        {
+        //            sb.Append(string.Format("{0:D3} ",array[x, y]));
+        //        }
+        //        sb.AppendLine();
+        //    }
+        //    return sb.ToString();
+        //}
 
         private void SetBits(bool[,] array, int row, int[] hash)
         {
-            var binary = string.Join("",hash.Select(b => Convert.ToString(b, 2).PadLeft(8,'0')).ToArray());
-            for (int i = 0; i < binary.Count(); i++)
+            var binary = string.Join("", hash.Select(b => Convert.ToString(b, 2).PadLeft(8, '0')).ToArray());
+            for (int i = 0; i < binary.Length; i++)
             {
                 array[row, i] = binary[i] == '1' ? true : false;
             }
@@ -58,9 +135,7 @@ namespace Runner
             for (int i = 0; i < 128; i++)
             {
                 var knotHash = GetKnotHash(string.Format("{0}-{1}", input,i));
-                //Console.WriteLine(knotHash.DenseHash);
                 var subTotal = CountBits(knotHash.DenseHash);
-                //Console.WriteLine(subTotal);
                 total += subTotal;
             }
 
@@ -76,17 +151,16 @@ namespace Runner
 
         private KnotHash GetKnotHash(string input)
         {
-            var arrayLength = 256;
-            var inputLengths = input.ToArray().Select(c => (byte)c).ToArray();
-            int[] hashLengths = AddSalt(inputLengths);
+            var inputBytes = input.ToArray().Select(c => (byte)c).ToArray();
+            int[] bytes = AddSalt(inputBytes);
 
-            var knotHash = Process(hashLengths, arrayLength, k => k.DoHash());
+            var knotHash = Process(bytes);
             return knotHash;
 
         }
-        private KnotHash Process(int[] hashLengths, int arrayLength, Action<KnotHash> action)
+        private KnotHash Process(int[] bytes)
         {
-
+            int arrayLength = 256;
             var array = new int[arrayLength];
             for (int i = 0; i < arrayLength; i++)
             {
@@ -98,19 +172,11 @@ namespace Runner
                 Pos = 0,
                 Skip = 0,
                 Data = array,
-                HashLengths = hashLengths
+                HashLengths = bytes
             };
 
-            action(knotHash);
+            knotHash.DoHash();
             return knotHash;
-        }
-
-        public static int[] AddSalt(byte[] inputLengths, int[] salt)
-        {
-            var hashLengths = new int[inputLengths.Length + salt.Length];
-            Array.Copy(inputLengths, 0, hashLengths, 0, inputLengths.Length);
-            Array.Copy(salt, 0, hashLengths, inputLengths.Length, salt.Length);
-            return hashLengths;
         }
 
         private static int[] AddSalt(byte[] inputLengths)
@@ -139,8 +205,6 @@ namespace Runner
                 }
 
                 DenseHash = GetDenseHash();
-
-                //DenseHash = string.Join("", denseHash.Select(h => h.ToString("x2")));
             }
 
             public int[] GetDenseHash()
