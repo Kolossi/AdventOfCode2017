@@ -1,0 +1,4 @@
+abcde|s1:eabcd
+abcde|s1,x3/4:eabdc
+abcde|s1,x3/4,pe/b:baedc
+abcde|s1,x3/4,pe/b,s1,x3/4,pe/b:ceadb
