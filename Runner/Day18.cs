@@ -1,6 +1,7 @@
 using OneOf;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 
 namespace Runner
@@ -8,8 +9,11 @@ namespace Runner
     // see 2016 day 12!
     class Day18 : Day
     {
-        private const string _SOUND_ = "_snd";
-        private const string _RECEIVE_ = "_rcv";
+        public static Token.Register _WAITING = new Token.Register() { RegName = "_lck" };
+        public static Token.Register _SEND = new Token.Register() { RegName = "_snd" };
+        public static Token.Register _RECEIVE = new Token.Register() { RegName = "_rcv" };
+        public static Token.Register _FINISHED = new Token.Register() { RegName = "_fin" };
+
         public class Token : OneOfBase<Token.Register, Token.LongValue>
         {
             public static Token GetToken(string input)
@@ -51,9 +55,9 @@ namespace Runner
             }
         }
 
-        public class Instruction : OneOfBase<Instruction.Copy, Instruction.Op, Instruction.Receive, Instruction.Jump>
+        public class Instruction : OneOfBase<Instruction.Copy, Instruction.Op, Instruction.Recover, Instruction.Jump, Instruction.Receive>
         {
-            public static Instruction GetInstruction(string input)
+            public static Instruction GetInstruction(string input, int firmwareVersion = 1)
             {
                 var parts = GetParts(input);
                 Instruction instruction;
@@ -63,7 +67,7 @@ namespace Runner
                         instruction = new Instruction.Copy()
                         {
                             Source = Token.GetToken(parts[1]),
-                            Destination = new Token.Register() { RegName = _SOUND_ }
+                            Destination = _SEND
                         };
                         break;
                     case "set":
@@ -103,11 +107,22 @@ namespace Runner
                         break;
 
                     case "rcv":
-                        instruction =
-                            new Instruction.Receive()
-                            {
-                                Compare = Token.GetToken(parts[1]),
-                            };
+                        if (firmwareVersion == 2)
+                        {
+                            instruction =
+                                new Instruction.Receive()
+                                {
+                                    Register = new Token.Register() { RegName = parts[1]} 
+                                };
+                        }
+                        else
+                        {
+                            instruction =
+                                new Instruction.Recover()
+                                {
+                                    Compare = Token.GetToken(parts[1]),
+                                };
+                        }
                         break;
 
                     case "jgz":
@@ -150,18 +165,16 @@ namespace Runner
                 }
             }
 
-            public class Receive : Instruction
+            public class Recover : Instruction
             {
                 public Token Compare { get; set; }
-                public Token.Register Rcv = new Token.Register { RegName = _RECEIVE_ };
-                public Token.Register Snd = new Token.Register { RegName = _SOUND_ };
 
-                public void ExecuteReceive(Alu alu)
+                public void ExecuteRecover(Alu alu)
                 {
                     var value = Compare.Match(reg => alu.GetRegValue(reg), val => val.Value);
                     if (value != 0)
                     {
-                        alu.SetRegValue(Rcv, alu.GetRegValue(Snd));
+                        alu.SetRegValue(_RECEIVE, alu.GetRegValue(_SEND));
                     }
                 }
             }
@@ -182,31 +195,99 @@ namespace Runner
                 }
             }
 
+            public class Receive : Instruction
+            {
+                public Token.Register Register { get; set; }
+
+                public void ExecuteReceive(Alu alu)
+                {
+                    if (alu.HasRegValue(_RECEIVE))
+                    {
+                        alu.SetRegValue(Register, alu.GetRegValue(_RECEIVE));
+                        alu.RemoveRegValue(_RECEIVE);
+                    }
+                    else
+                    {
+                        alu.SetRegValue(_WAITING,1);
+                    }
+                }
+            }
+
             public void Execute(Alu alu)
             {
                 this.Switch(copy => copy.ExecuteCopy(alu),
                     op => op.ExecuteOp(alu),
-                    recv => recv.ExecuteReceive(alu),
-                    jump => jump.ExecuteJump(alu));
+                    rcov => rcov.ExecuteRecover(alu),
+                    jump => jump.ExecuteJump(alu),
+                    recv => recv.ExecuteReceive(alu));
             }
 
         }
 
+        public class Hypervisor
+        {
+            public Alu[] Alus { get; set; }
+            //public string[] SourceCode { get; set; }
+
+            public void Boot(string input)
+            {
+                //SourceCode = GetLines(input);
+                Alus = new Alu[2]
+                {
+                    new Alu(this, 0, input, firmwareVersion: 2),
+                    new Alu(this, 1, input, firmwareVersion: 2)
+                };
+                Alus[0].Registers["p"] = 0;
+                Alus[1].Registers["p"] = 1;
+            }
+
+            public void Execute()
+            {
+                do
+                {
+                    foreach (var alu in Alus)
+                    {
+                        alu.ExecuteProgram();
+                    }
+                } while (!(Alus.All(a => a.HasRegValue(_FINISHED)
+                                         || (a.HasRegValue(_WAITING) && !a.ReceiveQueue.Any()))
+                        ));
+            }
+
+            public void Send(Alu alu, long value)
+            {
+                Alus[alu.AluRef == 0 ? 1 : 0].ReceiveQueue.Enqueue(value);
+            }
+        }
         public class Alu
         {
-            private Instruction[] Instructions { get; set; }
+            private Instruction[] Instructions { get;}
+            public Hypervisor Hypervisor { get; set; }
             public Dictionary<string, long> Registers { get; set; }
+            public Queue<long> ReceiveQueue { get; set; }
             public long Ptr { get; set; }
+            public int AluRef { get;}
+            public int FirmwareVersion { get; }
+            public int SendCount { get; set; }
 
-            public Alu(string input)
+            public Alu(string input, int firmwareVersion = 1) : this(null, 0, input, firmwareVersion)
             {
+            }
+
+            public Alu(Hypervisor hypervisor, int aluRef, string input, int firmwareVersion = 1)
+            {
+                Hypervisor = hypervisor;
+                AluRef = aluRef;
+                FirmwareVersion = firmwareVersion;
                 Registers = new Dictionary<string, long>();
+                SendCount = 0;
                 Ptr = 0;
                 var lines = GetLines(input);
                 Instructions = new Instruction[lines.Length];
+                ReceiveQueue = new Queue<long>();
                 foreach (var line in lines)
                 {
-                    Instructions[Ptr++] = Instruction.GetInstruction(line);
+                    Instructions[Ptr++] = Instruction.GetInstruction(line, firmwareVersion);
                 }
                 Ptr = 0;
 
@@ -227,6 +308,16 @@ namespace Runner
                 Registers[reg.RegName] = value;
             }
 
+            public bool HasRegValue(Token.Register reg)
+            {
+                return Registers.ContainsKey(reg.RegName);
+            }
+
+            public void RemoveRegValue(Token.Register reg)
+            {
+                if (HasRegValue(reg)) Registers.Remove(reg.RegName);
+            }
+
             public void AdjustPtr(long offset)
             {
                 Ptr += offset;
@@ -234,29 +325,49 @@ namespace Runner
 
             public void ExecuteProgram(bool haltOnReceive = false)
             {
-                Ptr = 0;
-                while (Ptr >= 0 && Ptr < Instructions.Length && (!haltOnReceive || !Registers.ContainsKey(_RECEIVE_)))
+                while (Ptr >= 0 && Ptr < Instructions.Length && (!haltOnReceive || !HasRegValue(_RECEIVE)))
                 {
+                    if (FirmwareVersion == 2)
+                    {
+                        if (ReceiveQueue.Any() && !HasRegValue(_RECEIVE))
+                        {
+                            SetRegValue(_RECEIVE, ReceiveQueue.Dequeue());
+                            RemoveRegValue(_WAITING);
+                        }
+                    }
+
                     Instructions[Ptr].Execute(this);
+
+                    if (FirmwareVersion == 2)
+                    {
+                        if (HasRegValue(_SEND))
+                        {
+                            Hypervisor.Send(this, GetRegValue(_SEND));
+                            SendCount++;
+                            RemoveRegValue(_SEND);
+                        }
+
+                        if (HasRegValue(_WAITING)) return;
+                    }
                     Ptr++;
                 }
+                SetRegValue(_FINISHED,1);
             }
         }
 
         public override string First(string input)
         {
-            //7481 too low
             var alu = new Alu(input);
             alu.ExecuteProgram(haltOnReceive: true);
-            return alu.Registers[_RECEIVE_].ToString();
+            return alu.GetRegValue(_RECEIVE).ToString();
         }
 
         public override string Second(string input)
         {
-            var alu = new Alu(input);
-            alu.Registers["c"] = 1;
-            alu.ExecuteProgram();
-            return alu.Registers["a"].ToString();
+            Hypervisor hv = new Hypervisor();
+            hv.Boot(input);
+            hv.Execute();
+            return hv.Alus[1].SendCount.ToString();
         }
 
     }
