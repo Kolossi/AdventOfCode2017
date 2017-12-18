@@ -259,6 +259,7 @@ namespace Runner
                 Alus[alu.AluRef == 0 ? 1 : 0].ReceiveQueue.Enqueue(value);
             }
         }
+
         public class Alu
         {
             private Instruction[] Instructions { get;}
@@ -282,9 +283,10 @@ namespace Runner
                 Registers = new Dictionary<string, long>();
                 SendCount = 0;
                 Ptr = 0;
+                ReceiveQueue = new Queue<long>();
+
                 var lines = GetLines(input);
                 Instructions = new Instruction[lines.Length];
-                ReceiveQueue = new Queue<long>();
                 foreach (var line in lines)
                 {
                     Instructions[Ptr++] = Instruction.GetInstruction(line, firmwareVersion);
@@ -327,31 +329,47 @@ namespace Runner
             {
                 while (Ptr >= 0 && Ptr < Instructions.Length && (!haltOnReceive || !HasRegValue(_RECEIVE)))
                 {
-                    if (FirmwareVersion == 2)
-                    {
-                        if (ReceiveQueue.Any() && !HasRegValue(_RECEIVE))
-                        {
-                            SetRegValue(_RECEIVE, ReceiveQueue.Dequeue());
-                            RemoveRegValue(_WAITING);
-                        }
-                    }
+                    ReceiveFromQueue();
 
                     Instructions[Ptr].Execute(this);
 
-                    if (FirmwareVersion == 2)
-                    {
-                        if (HasRegValue(_SEND))
-                        {
-                            Hypervisor.Send(this, GetRegValue(_SEND));
-                            SendCount++;
-                            RemoveRegValue(_SEND);
-                        }
+                    SendToQueue();
 
-                        if (HasRegValue(_WAITING)) return;
-                    }
+                    if (AwaitingInput()) return;
+
                     Ptr++;
                 }
-                SetRegValue(_FINISHED,1);
+                SetRegValue(_FINISHED, 1);
+            }
+
+            private void SendToQueue()
+            {
+                if (FirmwareVersion == 2)
+                {
+                    if (HasRegValue(_SEND))
+                    {
+                        Hypervisor.Send(this, GetRegValue(_SEND));
+                        SendCount++;
+                        RemoveRegValue(_SEND);
+                    }
+                }
+            }
+
+            private bool AwaitingInput()
+            {
+                return (FirmwareVersion == 2 && HasRegValue(_WAITING));
+            }
+
+            private void ReceiveFromQueue()
+            {
+                if (FirmwareVersion == 2)
+                {
+                    if (ReceiveQueue.Any() && !HasRegValue(_RECEIVE))
+                    {
+                        SetRegValue(_RECEIVE, ReceiveQueue.Dequeue());
+                        RemoveRegValue(_WAITING);
+                    }
+                }
             }
         }
 
@@ -369,6 +387,5 @@ namespace Runner
             hv.Execute();
             return hv.Alus[1].SendCount.ToString();
         }
-
     }
 }
