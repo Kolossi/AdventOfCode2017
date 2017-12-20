@@ -9,18 +9,18 @@ namespace Runner
     {
         public class XYZ : IEquatable<XYZ>
         {
-            public int X { get; set; }
-            public int Y { get; set; }
-            public int Z { get; set; }
+            public long X { get; set; }
+            public long Y { get; set; }
+            public long Z { get; set; }
 
             public XYZ(string input)
             {
                 var parts = input.Split(",");
-                X = int.Parse(parts[0].Trim());
-                Y = int.Parse(parts[1].Trim());
-                Z = int.Parse(parts[2].Trim());
+                X = long.Parse(parts[0].Trim());
+                Y = long.Parse(parts[1].Trim());
+                Z = long.Parse(parts[2].Trim());
             }
-            public XYZ(int x, int y, int z)
+            public XYZ(long x, long y, long z)
             {
                 X = x;
                 Y = y;
@@ -34,8 +34,8 @@ namespace Runner
 
             public override bool Equals(object obj)
             {
-                if (obj as XYZ == null) return base.Equals(obj);
-                XYZ objXYZ = (XYZ) obj;
+                XYZ objXYZ = obj as XYZ;
+                if (objXYZ == null) return false;
                 return Equals(objXYZ);
             }
 
@@ -62,25 +62,46 @@ namespace Runner
             public XYZ Pos { get; set; }
             public XYZ Vel { get; set; }
             public XYZ Accel { get; set; }
+            public XYZ Current { get; set; }
 
-            public XYZ PositionAt(int t)
+            public Particle PositionAt(int t)
             {
-                return new XYZ(CoordAt(t, Pos.X, Vel.X, Accel.X),
-                    CoordAt(t, Pos.Y, Vel.Y, Accel.Y),
-                    CoordAt(t, Pos.Z, Vel.Z, Accel.Z));
+                if (t == 0)
+                {
+                    Current = new XYZ(Pos.X, Pos.Y, Pos.Z);
+                }
+                else
+                {
+
+
+                    Current = new XYZ(CoordAt(t, Pos.X, Vel.X, Accel.X),
+                        CoordAt(t, Pos.Y, Vel.Y, Accel.Y),
+                        CoordAt(t, Pos.Z, Vel.Z, Accel.Z));
+                }
+                return this;
+            }
+
+            public Particle Tick()
+            {
+                Vel.X += Accel.X;
+                Vel.Y += Accel.Y;
+                Vel.Z += Accel.Z;
+                Pos.X += Vel.X;
+                Pos.Y += Vel.Y;
+                Pos.Z += Vel.Z;
+                return this;
             }
         
-            public int CoordAt(int t, int p, int v, int a)
+            public long CoordAt(int t, long p, long v, long a)
             {
-                //var res = (p + (t * (v + (t) * a)));
-                float pf = p;
-                float vf = v;
-                float af = a;
-                float tf = t-0.01f;
-                var res = (pf + vf*tf + (af*tf*tf)/2.0f);
-                //Console.WriteLine(res);
+                // this doesn't actually work!, but good enough for part1
+                decimal pd = p;
+                decimal vd = v;
+                decimal ad = a;
+                decimal td = t;
+                var res = decimal.Round(pd + vd*td + (ad*((td+0.5m)* (td + 0.5m)) /2.0m),MidpointRounding.AwayFromZero);
 
-                return (int)res;
+                return (long)res;
             }
         }
 
@@ -110,31 +131,45 @@ namespace Runner
             }
             return particles;
         }
+
         public override string First(string input)
         {
-            //126 too high
-            //122 too low!
-            // zero-based, 125
             var particles = GetParticles(input);
             var sb = new StringBuilder();
             sb.AppendLine();
 
+            Particle nearest = null;
+            var endPostions = particles.Select(p => new Particle() {Index = p.Index, Pos = p.PositionAt(2000).Current});
 
-            for (int t = 0; t < 10000; t++)
-            {
-                var endPostions = particles.Select(p => new Particle() { Index = p.Index, Pos = p.PositionAt(t) });
+            var distances = endPostions.Select(p => new {Index = p.Index, Dist = p.Pos.GetDistance()})
+                .OrderBy(d => d.Dist);
+            nearest = particles.First(p => p.Index == distances.First().Index);
 
-                var distances = endPostions.Select(p => new { Index = p.Index, Dist = p.Pos.GetDistance() })
-                    .OrderBy(d => d.Dist);
-                var nearest = distances.First().Index;
-                Console.WriteLine(nearest);
-            }
-            return "";
+            return nearest.Index.ToString();
         }
 
         public override string Second(string input)
         {
-            throw new NotImplementedException();
+            var particles = GetParticles(input);
+
+            for (int t = 0; t < 1000; t++)
+            {
+                foreach (var particle in particles)
+                {
+                    particle.Tick();
+                }
+                var xyzGroups = particles.GroupBy(p => p.Pos);
+                var collisionParticles = xyzGroups.Where(g => g.Count() > 1)
+                    .SelectMany(g => g).Select(p => p.Index);
+
+                if (collisionParticles.Any())
+                {
+                    particles = particles.Where(p => !collisionParticles.Contains(p.Index)).ToList();
+                }
+
+                if (particles.Count == 1) break;
+            }
+            return particles.Count.ToString();
         }
     }
 }
