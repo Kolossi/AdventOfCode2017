@@ -59,36 +59,35 @@ namespace Runner
         public class Particle
         {
             public int Index { get; set; }
-            public XYZ Pos { get; set; }
-            public XYZ Vel { get; set; }
-            public XYZ Accel { get; set; }
-            public XYZ Current { get; set; }
+            public XYZ Pos0 { get; set; }
+            public XYZ Vel0 { get; set; }
+            public XYZ Accel0 { get; set; }
+            public XYZ CurrentPos { get; set; }
+            public XYZ CurrentVel { get; set; }
 
             public Particle PositionAt(int t)
             {
                 if (t == 0)
                 {
-                    Current = new XYZ(Pos.X, Pos.Y, Pos.Z);
+                    return new Particle() {CurrentPos = new XYZ(Pos0.X, Pos0.Y, Pos0.Z)};
                 }
-                else
+
+                return new Particle()
                 {
-
-
-                    Current = new XYZ(CoordAt(t, Pos.X, Vel.X, Accel.X),
-                        CoordAt(t, Pos.Y, Vel.Y, Accel.Y),
-                        CoordAt(t, Pos.Z, Vel.Z, Accel.Z));
-                }
-                return this;
+                    CurrentPos = new XYZ(CoordAt(t, Pos0.X, Vel0.X, Accel0.X),
+                        CoordAt(t, Pos0.Y, Vel0.Y, Accel0.Y),
+                        CoordAt(t, Pos0.Z, Vel0.Z, Accel0.Z))
+                };
             }
 
             public Particle Tick()
             {
-                Vel.X += Accel.X;
-                Vel.Y += Accel.Y;
-                Vel.Z += Accel.Z;
-                Pos.X += Vel.X;
-                Pos.Y += Vel.Y;
-                Pos.Z += Vel.Z;
+                CurrentVel.X += Accel0.X;
+                CurrentVel.Y += Accel0.Y;
+                CurrentVel.Z += Accel0.Z;
+                CurrentPos.X += CurrentVel.X;
+                CurrentPos.Y += CurrentVel.Y;
+                CurrentPos.Z += CurrentVel.Z;
                 return this;
             }
         
@@ -99,7 +98,7 @@ namespace Runner
                 decimal vd = v;
                 decimal ad = a;
                 decimal td = t;
-                var res = decimal.Round(pd + vd*td + (ad*((td+0.5m)* (td + 0.5m)) /2.0m),MidpointRounding.AwayFromZero);
+                var res = decimal.Round(pd + vd * (td - 0.5m) + (ad * td * td) / 2.0m, MidpointRounding.AwayFromZero);
 
                 return (long)res;
             }
@@ -121,9 +120,11 @@ namespace Runner
                 var particle = new Particle()
                 {
                     Index = i++,
-                    Pos = new XYZ(pos),
-                    Vel = new XYZ(vel),
-                    Accel = new XYZ(accel)
+                    Pos0 = new XYZ(pos),
+                    Vel0 = new XYZ(vel),
+                    Accel0 = new XYZ(accel),
+                    CurrentPos = new XYZ(pos),
+                    CurrentVel = new XYZ(vel)
                 };
 
                 particles.Add(particle);
@@ -139,9 +140,9 @@ namespace Runner
             sb.AppendLine();
 
             Particle nearest = null;
-            var endPostions = particles.Select(p => new Particle() {Index = p.Index, Pos = p.PositionAt(2000).Current});
+            var endPostions = particles.Select(p => new Particle() {Index = p.Index, CurrentPos = p.PositionAt(2000).CurrentPos});
 
-            var distances = endPostions.Select(p => new {Index = p.Index, Dist = p.Pos.GetDistance()})
+            var distances = endPostions.Select(p => new {Index = p.Index, Dist = p.CurrentPos.GetDistance()})
                 .OrderBy(d => d.Dist);
             nearest = particles.First(p => p.Index == distances.First().Index);
 
@@ -157,8 +158,17 @@ namespace Runner
                 foreach (var particle in particles)
                 {
                     particle.Tick();
+                    //if (particle.Index == 0)
+                    //{
+                        //var posAtT = particle.PositionAt(t).CurrentPos;
+                        //if (!posAtT.Equals(particle.CurrentPos))
+                        //{
+                        //    Console.WriteLine(string.Format("{2}@{3}s:calced {0}!=actual {1}", posAtT,
+                        //        particle.CurrentPos, particle.Index, t));
+                        //}
+                    //}
                 }
-                var xyzGroups = particles.GroupBy(p => p.Pos);
+                var xyzGroups = particles.GroupBy(p => p.CurrentPos);
                 var collisionParticles = xyzGroups.Where(g => g.Count() > 1)
                     .SelectMany(g => g).Select(p => p.Index);
 
