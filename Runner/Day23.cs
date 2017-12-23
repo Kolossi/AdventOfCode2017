@@ -6,13 +6,10 @@ using System.Text;
 
 namespace Runner
 {
+
+    // see 2017 day 18 (and 2016 day 12)
     class Day23 : Day
     {
-        public static Token.Register _WAITING = new Token.Register() { RegName = "_lck" };
-        public static Token.Register _SEND = new Token.Register() { RegName = "_snd" };
-        public static Token.Register _RECEIVE = new Token.Register() { RegName = "_rcv" };
-        public static Token.Register _FINISHED = new Token.Register() { RegName = "_fin" };
-
         public class Token : OneOfBase<Token.Register, Token.LongValue>
         {
             public static Token GetToken(string input)
@@ -54,21 +51,14 @@ namespace Runner
             }
         }
 
-        public class Instruction : OneOfBase<Instruction.Copy, Instruction.Op, Instruction.Recover, Instruction.JumpPositive, Instruction.Receive, Instruction.JumpNotZero>
+        public class Instruction : OneOfBase<Instruction.Copy, Instruction.Op, Instruction.JumpPositive, Instruction.JumpNotZero>
         {
-            public static Instruction GetInstruction(string input, int firmwareVersion = 1)
+            public static Instruction GetInstruction(string input)
             {
                 var parts = GetParts(input);
                 Instruction instruction;
                 switch (parts[0])
                 {
-                    case "snd":
-                        instruction = new Instruction.Copy()
-                        {
-                            Source = Token.GetToken(parts[1]),
-                            Destination = _SEND
-                        };
-                        break;
                     case "set":
                         instruction = new Instruction.Copy()
                         {
@@ -76,16 +66,6 @@ namespace Runner
                             Destination = new Token.Register() { RegName = parts[1] }
                         };
                         break;
-                    case "add":
-                        instruction =
-                            new Instruction.Op()
-                            {
-                                Register = new Token.Register() { RegName = parts[1] },
-                                Value = Token.GetToken(parts[2]),
-                                Operation = (a, b) => a + b
-                            };
-                        break;
-
                     case "sub":
                         instruction =
                             new Instruction.Op()
@@ -105,7 +85,6 @@ namespace Runner
                                 Operation = (a, b) => a * b
                             };
                         break;
-
                     case "mod":
                         instruction =
                             new Instruction.Op()
@@ -115,26 +94,6 @@ namespace Runner
                                 Operation = (a, b) => a % b
                             };
                         break;
-
-                    case "rcv":
-                        if (firmwareVersion == 2)
-                        {
-                            instruction =
-                                new Instruction.Receive()
-                                {
-                                    Register = new Token.Register() { RegName = parts[1] }
-                                };
-                        }
-                        else
-                        {
-                            instruction =
-                                new Instruction.Recover()
-                                {
-                                    Compare = Token.GetToken(parts[1]),
-                                };
-                        }
-                        break;
-
                     case "jgz":
                         instruction = new Instruction.JumpPositive()
                         {
@@ -185,20 +144,6 @@ namespace Runner
                 }
             }
 
-            public class Recover : Instruction
-            {
-                public Token Compare { get; set; }
-
-                public void ExecuteRecover(Alu alu)
-                {
-                    var value = Compare.Match(reg => alu.GetRegValue(reg), val => val.Value);
-                    if (value != 0)
-                    {
-                        alu.SetRegValue(_RECEIVE, alu.GetRegValue(_SEND));
-                    }
-                }
-            }
-
             public class JumpPositive : Instruction
             {
                 public Token Compare { get; set; }
@@ -231,31 +176,11 @@ namespace Runner
                 }
             }
 
-            public class Receive : Instruction
-            {
-                public Token.Register Register { get; set; }
-
-                public void ExecuteReceive(Alu alu)
-                {
-                    if (alu.HasRegValue(_RECEIVE))
-                    {
-                        alu.SetRegValue(Register, alu.GetRegValue(_RECEIVE));
-                        alu.RemoveRegValue(_RECEIVE);
-                    }
-                    else
-                    {
-                        alu.SetRegValue(_WAITING, 1);
-                    }
-                }
-            }
-
             public void Execute(Alu alu)
             {
                 this.Switch(copy => copy.ExecuteCopy(alu),
                     op => op.ExecuteOp(alu),
-                    rcov => rcov.ExecuteRecover(alu),
                     jgz => jgz.ExecuteJump(alu),
-                    recv => recv.ExecuteReceive(alu),
                     jnz => jnz.ExecuteJump(alu));
             }
 
@@ -264,25 +189,15 @@ namespace Runner
         public class Alu
         {
             private Instruction[] Instructions { get; }
-            //public Hypervisor Hypervisor { get; set; }
             public Dictionary<string, long> Registers { get; set; }
             public Queue<long> ReceiveQueue { get; set; }
             public long Ptr { get; set; }
             public int AluRef { get; }
-            public int FirmwareVersion { get; }
             public int SendCount { get; set; }
             public Dictionary<string,int> DebugCount { get; set; }
 
-            public Alu(string input, int firmwareVersion = 1)
-            //: this(null, 0, input, firmwareVersion)
+            public Alu(string input)
             {
-                //}
-
-                //public Alu(Hypervisor hypervisor, int aluRef, string input, int firmwareVersion = 1)
-                //{
-                //Hypervisor = hypervisor;
-                //AluRef = aluRef;
-                FirmwareVersion = firmwareVersion;
                 Registers = new Dictionary<string, long>();
                 SendCount = 0;
                 DebugCount = new Dictionary<string, int>();
@@ -293,7 +208,7 @@ namespace Runner
                 Instructions = new Instruction[lines.Length];
                 foreach (var line in lines)
                 {
-                    Instructions[Ptr++] = Instruction.GetInstruction(line, firmwareVersion);
+                    Instructions[Ptr++] = Instruction.GetInstruction(line);
                 }
                 Ptr = 0;
 
@@ -334,54 +249,12 @@ namespace Runner
                 Ptr += offset;
             }
 
-            public void ExecuteProgram(bool haltOnReceive = false)
+            public void ExecuteProgram()
             {
-                //int counter = 0;
-                while (Ptr >= 0 && Ptr < Instructions.Length && (!haltOnReceive || !HasRegValue(_RECEIVE)))
+                while (Ptr >= 0 && Ptr < Instructions.Length)
                 {
-                    ReceiveFromQueue();
-
                     Instructions[Ptr].Execute(this);
-
-                    SendToQueue();
-
-                    if (AwaitingInput()) return;
-
                     Ptr++;
-
-                    //counter++;
-                    //if ((counter % 10000000) == 0) Console.WriteLine("{0}     {1}", Registers.GetValueOrDefault("a"), Registers.GetValueOrDefault("h"));
-                }
-                SetRegValue(_FINISHED, 1);
-            }
-
-            private void SendToQueue()
-            {
-                if (FirmwareVersion == 2)
-                {
-                    if (HasRegValue(_SEND))
-                    {
-                        //Hypervisor.Send(this, GetRegValue(_SEND));
-                        SendCount++;
-                        RemoveRegValue(_SEND);
-                    }
-                }
-            }
-
-            private bool AwaitingInput()
-            {
-                return (FirmwareVersion == 2 && HasRegValue(_WAITING));
-            }
-
-            private void ReceiveFromQueue()
-            {
-                if (FirmwareVersion == 2)
-                {
-                    if (ReceiveQueue.Any() && !HasRegValue(_RECEIVE))
-                    {
-                        SetRegValue(_RECEIVE, ReceiveQueue.Dequeue());
-                        RemoveRegValue(_WAITING);
-                    }
                 }
             }
         }
@@ -389,15 +262,34 @@ namespace Runner
         public override string First(string input)
         {
             var alu = new Alu(input);
-            alu.ExecuteProgram(haltOnReceive: true);
+            alu.ExecuteProgram();
             return alu.DebugCount["mul"].ToString();
         }
 
         public override string SecondTest(string input)
         {
-            return "";
+            return "The second test file has the input decompiled";
         }
+
         public override string Second(string input)
+        {
+            //return SecondInCSharp();
+            var alu = new Alu(PatchProgram(input));
+            alu.Registers["a"] = 1;
+            alu.ExecuteProgram();
+            return alu.Registers["h"].ToString();
+        }
+        
+        public string PatchProgram(string input)
+        {
+            input = input
+                .Replace("set g d\r\nmul g e\r\nsub g b",
+                         "set g b\r\nmod g e\r\njnz 0 0")
+                .Replace("set f 0", "jnz 1 10")
+                .Replace("jnz g -13", "jnz 0 0");
+            return input;
+        }
+        public string SecondInCSharp()
         {
             int b = 107900;
             
@@ -405,26 +297,62 @@ namespace Runner
             do
             {
                 bool incH = false;
-                var d = 2;
-                do
-                {
+                //var d = 2;
+                //do
+                //{
                     var e = 2;
                     do
                     {
-                        if ((d * e) == b)
+                        if (b % e == 0)
+                        //if ((d * e) == b)
                         {
                             incH = true;
                             
                         }
                         e++;
                     } while (!incH && e != b); // 100000 ish loops(2->b)
-                    d++;
-                } while (!incH && d != b); //100000 ish loops(2->b)
+                //d++;
+                //} while (!incH && d != b); //100000 ish loops(2->b)
 
-                if (incH) h++;
+            if (incH) h++;
                 if (b == 124900) return h.ToString(); //break;// exit //1001? loops
                 b += 17;
             } while (true);
         }
+
+        //  1 set b 79
+        //  2 set c b
+        //  3 jnz a 2
+        //  4 jnz 1 5
+        //  5 mul b 100
+        //  6 sub b -100000
+        //  7 set c b
+        //  8 sub c -17000
+        //  9 set f 1
+        // 10 set d 2
+        // 11 set e 2
+        // 12 set g b # was set g d // instead of trying to find d,e where d*e=b
+        // 13 mod g e # was mul g e // just find any e which is a factor of b (b%e==0)
+        // 14 jnz 0 0 # was sub g b // we then don't need the outer (d) loop
+        // 15 jnz g 2
+        // 16 jnz 1 10 # was set f 0 // this way we exit the loop when a match is found
+        // 17 sub e -1
+        // 18 set g e
+        // 19 sub g b
+        // 20 jnz g -8
+        // 21 sub d -1
+        // 22 set g d
+        // 23 sub g b
+        // 24 jnz 0 0 # was jnz g -13
+        // 25 jnz f 2
+        // 26 sub h -1
+        // 27 set g b
+        // 28 sub g c
+        // 29 jnz g 2
+        // 30 jnz 1 3
+        // 31 sub b -17
+        // 32 jnz 1 -23
+
+
     }
 }
