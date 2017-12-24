@@ -11,30 +11,11 @@ namespace Runner
         {
             public int Link1 { get; set; }
             public int Link2 { get; set; }
-
-            public override string ToString()
-            {
-                return string.Format("{0}/{1}", Link1, Link2);
-            }
         }
 
         public class Bridge
         {
             public List<Component> Parts { get; set; }
-            public bool Dirty { get; set; } = true;
-            public int HashCode { get; set; }
-
-            public Bridge(Component component)
-            {
-                Parts = new List<Component>();
-                this.Add(component);
-            }
-
-            public Bridge(IEnumerable<Component> components)
-            {
-                Parts = new List<Component>(components);
-                Dirty = true;
-            }
 
             public int GetNextLink()
             {
@@ -48,99 +29,36 @@ namespace Runner
                 return beforeCmp.Link1 == lstCmp.Link1 || beforeCmp.Link2 == lstCmp.Link1 ? lstCmp.Link2 : lstCmp.Link1;
             }
 
-            public void Add(Component cmp)
-            {
-                Parts.Add(cmp);
-                Dirty = true;
-            }
-
-            public override int GetHashCode()
-            {
-                if (Dirty)
-                {
-                    UpdateState();
-                }
-                return HashCode;
-            }
-
-            private void UpdateState()
-            {
-                HashCode = Parts.Select(p => p.Link1 ^ p.Link2).Aggregate((p1, p2) => p1 ^ p2);
-                //Parts = Parts.OrderBy(p => p.Link1).ThenBy(p => p.Link2).ToList();
-                Dirty = false;
-            }
-
-            public override bool Equals(object obj)
-            {
-                var bridgeObj = obj as Bridge;
-                if (bridgeObj == null) return false;
-                if (bridgeObj.Parts.Count() != Parts.Count) return false;
-                if (Dirty)
-                {
-                    UpdateState();
-                }
-                foreach (var part in Parts)
-                {
-                    if (!bridgeObj.Parts.Contains(part)) return false;
-                }
-                return true;
-            }
-
             public int GetStrength()
             {
                 return Parts.Sum(p => p.Link1) + Parts.Sum(p => p.Link2);
-            }
-
-            public override string ToString()
-            {
-                return string.Join("--", Parts.Select(p => p.ToString()).ToArray());
             }
         }
 
         public class Previous
         {
-            Dictionary<int, List<Bridge>> _Before = new Dictionary<int, List<Bridge>>();
+            List<Bridge> _Before = new List<Bridge>();
 
             public void AddBridge(Bridge bridge)
             {
-                var key = bridge.GetHashCode();
-                List<Bridge> list;
-                if (!_Before.TryGetValue(key, out list))
-                {
-                    list = new List<Bridge>();
-                    _Before[key] = list;
-                }
-                list.Add(bridge);
-            }
-
-            public bool SeenBefore(Bridge bridge)
-            {
-                var key = bridge.GetHashCode();
-                List<Bridge> list;
-                if (!_Before.TryGetValue(key, out list)) return false;
-                foreach (var previous in list)
-                {
-                    if (previous.Equals(bridge)) return true;
-                }
-                return false;
+                    _Before.Add(bridge);
             }
 
             public int MaxStrength()
             {
-                return _Before.SelectMany(k => k.Value).Max(b => b.GetStrength());
+                return _Before.Max(b => b.GetStrength());
             }
 
             public int BestBridgeStrength()
             {
-                return  _Before.SelectMany(k => k.Value).GroupBy(b => b.Parts.Count()).OrderByDescending(g => g.Key).First()
+                return  _Before.GroupBy(b => b.Parts.Count()).OrderByDescending(g => g.Key).First()
                     .OrderByDescending(b => b.GetStrength()).First().GetStrength();
             }
 
             public override string ToString()
             {
                 return string.Join(Environment.NewLine, 
-                    _Before.SelectMany(k => k.Value)
-                       .Select(b => b.ToString()).ToArray());
+                    _Before.Select(b => b.ToString()).ToArray());
             }
         }
 
@@ -148,7 +66,6 @@ namespace Runner
         {
             public Dictionary<int,List<Component>> LinkLookup { get; set; }
             public HashSet<Component> All { get; set; }
-
 
             public Inventory()
             {
@@ -209,7 +126,9 @@ namespace Runner
             var previous = new Previous();
             foreach (var cmp in inventory.LinkLookup[0])
             {
-                queue.Enqueue(new Bridge(cmp));
+                var bridge = new Bridge() { Parts = new List<Component>() };
+                bridge.Parts.Add(cmp);
+                queue.Enqueue(bridge);
             }
             while (queue.Any())
             {
@@ -221,8 +140,8 @@ namespace Runner
                 foreach (var possible in possibles)
                 {
                     if (bridge.Parts.Contains(possible)) continue;
-                    var newBridge = new Bridge(bridge.Parts);
-                    newBridge.Add(possible);
+                    var newBridge = new Bridge() { Parts = new List<Component>(bridge.Parts) };
+                    newBridge.Parts.Add(possible);
                     queue.Enqueue(newBridge);
                 }
             }
