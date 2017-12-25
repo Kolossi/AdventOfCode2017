@@ -32,8 +32,8 @@ namespace Runner
                 //new Day21(),
                 //new Day22(),
                 //new Day23(),
-                new Day24(),
-                //new Day25()
+                //new Day24(),
+                new Day25()
             };
 
             foreach (var day in days)

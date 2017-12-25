@@ -101,9 +101,10 @@ namespace Runner
             foreach (var line in lines)
             {
 
+                int colon = line.LastIndexOf(":");
                 var parts = line.Split(":");
-                var testInput = parts[0];
-                var expectedOutput = parts[1];
+                var testInput = line.Substring(0,colon);
+                var expectedOutput = line.Substring(colon+1,line.Length-colon-1);
                 string output = string.Empty;
                 try
                 {
